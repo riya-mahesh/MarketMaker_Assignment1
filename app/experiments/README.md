@@ -288,7 +288,7 @@ sendOrderToExchange(); else HandleError(errorFlags);"*.
   send exactly the `.expected` orders.
 - **Metric:** handler time per market data message or exchange report (tap arrival → end of
   the handler). Most throws happen on messages that send no order, which tick-to-trade cannot
-  see; handler time shows how long they keep the hot path busy.
+  see; handler time shows how long they keep the hot path busy for the next trade causing a delay.
 
 Handler time (ns):
 
