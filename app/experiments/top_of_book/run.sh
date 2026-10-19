@@ -8,8 +8,8 @@
 # reports mean, median and standard deviation of tick-to-trade per scenario.
 # A copy of the table goes to build/experiments/top_of_book/results.md.
 #
-#   sh app/experiments/top_of_book/run.sh            # 30 runs per version per scenario
-#   RUNS=10 sh app/experiments/top_of_book/run.sh
+#   sh app/experiments/top_of_book/run.sh            # one run per version per scenario (RUNS=n for more)
+#   RUNS=10 sh app/experiments/top_of_book/run.sh  # statistics over the orders of 10 runs
 set -e
 cd "$(dirname "$0")/../../.."
 
@@ -25,4 +25,4 @@ ${CXX:-c++} -std=c++20 -O2 -g -Wall -Wextra -Wpedantic -I "$EXP/full_scan" -I . 
     "$EXP/full_scan/app/market_data/book.cpp" build/libsim.a \
     -o "$OUT/market_maker_full_scan"
 
-python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-30}" | tee "$OUT/results.md"
+python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-1}" | tee "$OUT/results.md"

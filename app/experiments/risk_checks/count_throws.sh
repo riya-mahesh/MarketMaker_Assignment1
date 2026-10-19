@@ -7,7 +7,7 @@
 # catch), then runs each scenario RUNS times and summarizes with throws.py.
 # A copy of the tables goes to build/experiments/risk_checks/throws.md.
 #
-#   sh app/experiments/risk_checks/count_throws.sh          # 30 runs per scenario
+#   sh app/experiments/risk_checks/count_throws.sh          # one run per scenario (RUNS=n for more)
 set -e
 cd "$(dirname "$0")/../../.."
 
@@ -21,4 +21,4 @@ ${CXX:-c++} -std=c++20 -O2 -g -Wall -Wextra -Wpedantic -I "$EXP/instrumented" -I
     app/market_data/book.cpp build/libsim.a \
     -o "$OUT/market_maker_instrumented"
 
-python3 -I "$EXP/throws.py" "$OUT" "${RUNS:-30}" | tee "$OUT/throws.md"
+python3 -I "$EXP/throws.py" "$OUT" "${RUNS:-1}" | tee "$OUT/throws.md"

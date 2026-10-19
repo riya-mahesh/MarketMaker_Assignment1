@@ -81,7 +81,7 @@ def main():
                     two[s]["second"].append(d["sends"][1] - d["entry"])
                     two[s]["n"] += 1
 
-    print(f"Times in ns, pooled over {runs} runs per scenario.\n")
+    print(f"Times in ns. Statistics are over the individual samples (orders or deliveries) of {runs} run(s) per scenario.\n")
 
     print("Flaw 2: what the original report averages, per run\n")
     print("| Scenario | Samples averaged | Timer ticks | Messages/reports with no order "
@@ -91,15 +91,15 @@ def main():
         c = counts[scn.stem]
         print(f"| {scn.stem} | {c['all']} | {c['timer']} | {c['no_order']} | {c['sent']} | {c['orders']} |")
 
-    print("\nFlaw 1: deliveries that send two orders (bid, then ask)\n")
-    print("| Scenario | Such deliveries per run | Original sample (handler end): mean | median | std dev "
-          "| 1st order tick-to-trade: mean | median | std dev | 2nd order tick-to-trade: mean | median | std dev |")
+    print("\nFlaw 1: deliveries that send two orders (bid, then ask); times from the delivery's arrival\n")
+    print("| Scenario | Deliveries with 2 orders, per run | Bid sent: mean | median | std dev "
+          "| Ask sent: mean | median | std dev | Handler finished (original report): mean | median | std dev |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for scn in scenarios:
         t = two[scn.stem]
         if t["n"]:
-            print(f"| {scn.stem} | {t['n'] // runs} | {stats(t['handler'])} "
-                  f"| {stats(t['first'])} | {stats(t['second'])} |")
+            print(f"| {scn.stem} | {t['n'] // runs} | {stats(t['first'])} "
+                  f"| {stats(t['second'])} | {stats(t['handler'])} |")
 
     print("\nFix: original samples vs. corrected (per-order) samples\n")
     print("| Scenario | Original: samples per run | mean | median | std dev "

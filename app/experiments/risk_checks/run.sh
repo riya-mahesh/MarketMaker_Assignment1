@@ -9,8 +9,8 @@
 # and reports mean, median and standard deviation of tick-to-trade and handler
 # time per scenario. A copy of the tables goes to build/experiments/risk_checks/results.md.
 #
-#   sh app/experiments/risk_checks/run.sh            # 30 runs per version per scenario
-#   RUNS=10 sh app/experiments/risk_checks/run.sh
+#   sh app/experiments/risk_checks/run.sh            # one run per version per scenario (RUNS=n for more)
+#   RUNS=10 sh app/experiments/risk_checks/run.sh  # statistics over the orders of 10 runs
 set -e
 cd "$(dirname "$0")/../../.."
 
@@ -28,4 +28,4 @@ for v in cook_flags; do
         -o "$OUT/market_maker_$v"
 done
 
-python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-30}" | tee "$OUT/results.md"
+python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-1}" | tee "$OUT/results.md"

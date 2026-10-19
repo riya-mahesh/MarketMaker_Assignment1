@@ -73,7 +73,7 @@ def main():
             row = " | ".join(cells(data[(v, s)]) for v in VERSIONS)
             print(f"| {s} | {len(data[('baseline', s)]) // runs} | {same} | {row} |")
 
-    print(f"Times in ns, over {runs} runs of each version.")
+    print(f"Times in ns. Statistics are over the orders / messages of {runs} run(s) of each version.")
     table("Tick-to-trade per order", t2t, "Orders")
     table("Handler time per market data message and execution report", handler, "Messages")
 

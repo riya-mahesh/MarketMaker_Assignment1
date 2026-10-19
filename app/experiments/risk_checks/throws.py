@@ -35,7 +35,7 @@ def main():
         return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f} | {sd:,.0f}"
 
     print(f"Risk-check exceptions: how many per run, and the time from just before `throw` to\n"
-          f"the start of the matching catch, in ns, over {runs} runs. The first throw of each\n"
+          f"the start of the matching catch, in ns, over {runs} run(s). The first throw of each\n"
           f"run is listed separately because it is much slower (the runtime loads its\n"
           f"unwinding tables).\n")
     print("| Scenario | Exception | What the catch does | Throws per run | Mean | Median | Std dev |")

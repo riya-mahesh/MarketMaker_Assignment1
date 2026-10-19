@@ -7,10 +7,10 @@ version sends exactly the orders in `sim/fixtures/*.expected`.
 | # | Experiment | Design decision examined | Result in one line |
 |---|---|---|---|
 | 1 | [Corrected evaluation](#1-corrected-evaluation) | §2.1 Evaluation (flaw) | The original report takes one end time per delivery and averages deliveries that sent no order; per-order tick-to-trade fixes both |
-| 2 | [Cached top of book](#2-cached-top-of-book) | §2.2.1 Top of book (good decision) | Searching the price ladder instead makes the median order ~124× slower |
-| 3 | [Risk checks](#3-risk-checks-exceptions-vs-error-flags) | §2.2.3 Risk checks (flaw) | Exceptions are thrown on routine messages; Cook's error flags make message handling 6–12× faster |
+| 2 | [Cached top of book](#2-cached-top-of-book) | §2.2.1 Top of book (good decision) | Searching the price ladder instead makes the median order ~128× slower |
+| 3 | [Risk checks](#3-risk-checks-exceptions-vs-error-flags) | §2.2.3 Risk checks (flaw) | Exceptions are thrown on routine messages; Cook's error flags make message handling 5–11× faster |
 
-All results below come from one session (all scripts run back to back).
+All results below come from **one run** of each scenario per version (all scripts run back to back).
 
 ## How the experiments work
 
@@ -26,10 +26,12 @@ All results below come from one session (all scripts run back to back).
     of the market data message triggering the trade."*
   - **Handler time**: for each market data message or exchange report, the time the app
     finished handling it minus the time it arrived.
-- **Statistics.** Each scenario is run 30 times per version, alternating versions so
-  background load affects all alike; samples are pooled. Every table reports the **mean**,
-  the **median** (the typical value, unaffected by a few slow outliers) and the **standard
-  deviation** (the spread; sample standard deviation).
+- **Statistics.** Each scenario is run **once** per version. The **mean**, **median** (the
+  typical value, unaffected by a few slow outliers) and **standard deviation** (the spread;
+  sample standard deviation) in every table are taken **over the individual orders, or
+  messages, of that run**, e.g. the 14 orders of `basic`. Nothing is averaged across runs.
+  A single run is noisy (one slow order can move a mean), so the median is the more
+  reliable figure. `RUNS=n sh <script>` collects the orders of n runs instead.
 - **Machine.** Apple M4 Pro, Apple clang 17, `-O2`. Absolute times differ between sessions
   as the machine's load changes; compare versions **within** a table, not across tables.
 
@@ -69,25 +71,26 @@ every run of `build/market_maker`), `evaluation/` (measurement).
 - **Handler finished:** when `latency_.Record()` ran at the end of the handler. This is the
   single number the original report counts for the delivery.
 
-Times in ns, mean, median, standard deviation across 30 runs:
+Times in ns; mean, median and standard deviation over the two-order deliveries of one run:
 
 | Scenario | No of deliveries with 2 orders per run| Bid sent: mean | Median | Std dev | Ask sent: mean | Median | Std dev | Handler finished (original report): mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|---|---|---|
-| basic | 3 | 1,294 | 375 | 1,397 | 2,107 | 708 | 2,091 | 2,158 | 750 | 2,092 |
-| empty_side | 3 | 1,516 | 708 | 1,383 | 2,421 | 1,083 | 2,141 | 2,475 | 1,125 | 2,148 |
-| gap | 2 | 3,752 | 4,062 | 991 | 4,794 | 4,584 | 674 | 4,910 | 4,688 | 663 |
-| loss | 5 | 1,051 | 375 | 1,531 | 1,784 | 875 | 2,085 | 1,825 | 896 | 2,097 |
-| position | 11 | 642 | 333 | 967 | 1,141 | 667 | 1,411 | 1,185 | 709 | 1,414 |
-| quiet | 1 | 3,579 | 3,021 | 1,436 | 5,533 | 4,833 | 1,481 | 5,583 | 4,874 | 1,481 |
-| sweep | 5 | 1,044 | 459 | 1,270 | 1,693 | 792 | 1,868 | 1,731 | 834 | 1,867 |
+| basic | 3 | 1,556 | 417 | 2,045 | 2,514 | 708 | 3,200 | 2,556 | 750 | 3,200 |
+| empty_side | 3 | 1,667 | 750 | 1,809 | 2,583 | 1,083 | 2,817 | 2,639 | 1,125 | 2,842 |
+| gap | 2 | 4,688 | 4,688 | 1,503 | 5,771 | 5,771 | 30 | 5,896 | 5,896 | 147 |
+| loss | 5 | 1,025 | 375 | 1,390 | 1,733 | 875 | 2,066 | 1,767 | 875 | 2,071 |
+| position | 11 | 575 | 333 | 743 | 1,060 | 666 | 1,230 | 1,098 | 709 | 1,232 |
+| quiet | 1 | 3,250 | 3,250 | 0 | 5,375 | 5,375 | 0 | 5,417 | 5,417 | 0 |
+| sweep | 5 | 1,000 | 542 | 1,097 | 1,609 | 834 | 1,782 | 1,634 | 834 | 1,790 |
 
 - The original's single sample is later than **both** orders: in `basic`, a median 750 ns
-  where the bid actually left after 375 ns and the ask after 708 ns.
+  where the bid actually left after 417 ns and the ask after 708 ns.
 - It is effectively the **ask's** tick-to-trade: once the ask is sent, the handler only
   returns and reads the clock, so "handler finished" lands one clock step (~42 ns) later.
-- The ~330 ns between the bid and the ask is the ask's pre-send work: its quote-history
-  entry, its `fprintf` to `decisions.log`, and building the message.
-- The bid, the order that leaves first, is overstated 1.6× to 2.4× (median) in most scenarios.
+- The ~300 to 500 ns between the bid and the ask is the ask's pre-send work: its
+  quote-history entry, its `fprintf` to `decisions.log`, and building the message.
+- The bid, the order that leaves first, is overstated 1.5× to 2.3× (median) in most scenarios.
+- `quiet` has only one such delivery, so its mean equals its median and its std dev is 0.
 
 
 ### Flaw 2: deliveries with no trading decision are averaged in
@@ -119,26 +122,26 @@ Times in ns, mean, median, standard deviation across 30 runs:
 - A delivery with two orders gives two latencies; a delivery with none gives none.
 - Counts every order the app sends, including the loss-limit halt's cancels, which the
   timer triggers.
-- Reports the count, mean, median and standard deviation, e.g.
-  `corrected tick-to-trade: 14 orders, mean 1372 ns, median 416.5 ns, std dev 2366 ns`.
+- Reports the count, mean, median and standard deviation over the orders of the run,
+  e.g. for `basic`: `corrected tick-to-trade: 14 orders, mean 1104 ns, median 438 ns, std dev 1740 ns`.
 
-**Result.** The original report's samples vs. the corrected samples (ns, 30 runs):
+**Result.** The original report's samples vs. the corrected samples (ns; statistics over the deliveries and the orders of one run):
 
 | Scenario | Original: samples per run | Mean | Median | Std dev | Corrected: orders per run | Mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|---|
-| basic | 54 | 1,330 | 83 | 7,550 | 14 | 971 | 417 | 1,349 |
-| empty_side | 42 | 2,171 | 42 | 8,822 | 6 | 1,968 | 958 | 1,854 |
-| gap | 36 | 2,487 | 42 | 8,609 | 4 | 4,273 | 4,333 | 993 |
-| loss | 118 | 1,507 | 83 | 5,394 | 21 | 1,272 | 459 | 1,593 |
-| position | 117 | 1,047 | 42 | 6,024 | 30 | 954 | 542 | 1,260 |
-| quiet | 48 | 1,459 | 42 | 8,006 | 2 | 4,556 | 4,479 | 1,750 |
-| sweep | 59 | 1,246 | 42 | 7,135 | 11 | 1,290 | 667 | 1,571 |
+| basic | 54 | 1,991 | 83 | 12,030 | 14 | 1,104 | 438 | 1,740 |
+| empty_side | 42 | 2,228 | 42 | 9,188 | 6 | 2,125 | 958 | 2,176 |
+| gap | 36 | 2,926 | 42 | 9,890 | 4 | 5,229 | 5,750 | 1,070 |
+| loss | 118 | 1,414 | 42 | 5,245 | 21 | 1,192 | 375 | 1,437 |
+| position | 117 | 1,042 | 42 | 4,641 | 30 | 958 | 500 | 1,274 |
+| quiet | 48 | 1,413 | 42 | 7,631 | 2 | 4,312 | 4,312 | 1,503 |
+| sweep | 59 | 1,148 | 42 | 6,501 | 11 | 1,231 | 709 | 1,379 |
 
 ### Conclusions
 
 - **The original mostly measures non-trading work.** Its median sample (42 to 83 ns) is a
-  delivery that sent nothing; a typical order takes 417 to 4,479 ns.
-- **Its mean is unreliable.** Its standard deviation is 3.5 to 6 times its mean, because a few
+  delivery that sent nothing; a typical order takes 375 to 5,750 ns.
+- **Its mean is unreliable.** Its standard deviation is 3.4 to 6 times its mean, because a few
   cold deliveries of tens of µs dominate.
 - **Its error has no fixed direction.** In `gap`, `quiet` and `sweep` the original mean is
   below the true tick-to-trade (diluted by cheap no-order samples); in the other four it is
@@ -166,20 +169,20 @@ Times in ns, mean, median, standard deviation across 30 runs:
   no `RecomputeBest`). `top()` scans the price ladder on every call: bids from $2,000 down,
   asks from $0 up, each stopping at the first non-empty level.
 - Everything else in the book and the app is unchanged.
-- Both versions, 30 alternating runs per scenario; tick-to-trade per order.
+- Both versions, one run per scenario; statistics over the orders of that run.
 
 ### Result (ns)
 
 | Scenario | Orders per run | Same orders | Cached: mean | Median | Std dev | Full scan: mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|---|
-| basic | 14 | yes | 1,126 | 417 | 1,764 | 80,100 | 77,334 | 7,732 |
-| empty_side | 6 | yes | 2,278 | 1,000 | 2,296 | 82,656 | 79,979 | 7,317 |
-| gap | 4 | yes | 5,087 | 4,667 | 1,312 | 44,837 | 50,020 | 39,266 |
-| loss | 21 | yes | 1,331 | 438 | 1,716 | 80,430 | 77,646 | 6,339 |
-| position | 30 | yes | 981 | 562 | 1,359 | 79,624 | 77,375 | 4,982 |
-| quiet | 2 | yes | 4,881 | 4,979 | 1,481 | 85,519 | 82,896 | 6,999 |
-| sweep | 11 | yes | 1,491 | 709 | 2,032 | 80,656 | 77,854 | 5,617 |
-| **All scenarios** | **88** | **yes** | **1,515** | **625** | **1,957** | **78,781** | **77,583** | **12,719** |
+| basic | 14 | yes | 1,057 | 459 | 1,556 | 102,702 | 102,042 | 13,828 |
+| empty_side | 6 | yes | 2,076 | 1,021 | 2,012 | 78,736 | 77,730 | 1,952 |
+| gap | 4 | yes | 4,312 | 4,562 | 850 | 42,604 | 42,125 | 43,742 |
+| loss | 21 | yes | 1,183 | 417 | 1,385 | 78,179 | 77,167 | 2,073 |
+| position | 30 | yes | 900 | 520 | 1,150 | 78,365 | 77,188 | 2,562 |
+| quiet | 2 | yes | 4,854 | 4,854 | 1,503 | 83,833 | 83,833 | 1,945 |
+| sweep | 11 | yes | 1,310 | 708 | 1,593 | 78,303 | 77,333 | 2,424 |
+| **All scenarios** | **88** | **yes** | **1,369** | **604** | **1,622** | **80,709** | **77,375** | **15,746** |
 
 ### Why: memory read per lookup
 
@@ -192,8 +195,8 @@ Times in ns, mean, median, standard deviation across 30 runs:
 ### Conclusions
 
 - **Same orders, far less work.** Both versions send exactly the `.expected` orders in all 7
-  scenarios. The median order leaves after 625 ns with the cache and 77,583 ns with the
-  full scan, about 124× slower.
+  scenarios. The median order leaves after 604 ns with the cache and 77,375 ns with the
+  full scan, about 128× slower.
 - **`gap`** differs less and has a large spread because half its orders are the halt's
   cancels, which are sent before the top of book is read.
 - **Matches industry practice:** the QuantCup 1 winning order book also keeps
@@ -236,34 +239,34 @@ decoding, `std::runtime_error` from the decision log) are fatal errors that neve
 
 **Evidence.** `instrumented/` adds logging to `risk.h` and `market_maker.cpp`: each throw
 records the time just before `throw`, and each `catch` reports the exception, what it does
-with it, and the time elapsed. 30 runs per scenario; times in ns.
+with it, and the time elapsed. One run per scenario; times in ns.
 
-Throws per run (the counts are identical every run):
+Throws in the run (the counts are identical every run):
 
-| Scenario | Book invalid | Position limit | Gap: halt | Ignored while halted | **Total** | Time throwing per run: mean | Median | Std dev |
-|---|---|---|---|---|---|---|---|---|
-| basic | 2 | – | – | – | **2** | 28,181 | 26,188 | 7,481 |
-| empty_side | 9 | – | – | – | **9** | 46,425 | 43,584 | 7,271 |
-| gap | 2 | – | 1 | 6 | **9** | 48,699 | 46,730 | 6,096 |
-| loss | 10 | 13 | – | 10 | **33** | 120,976 | 117,412 | 8,239 |
-| position | 2 | 12 | – | – | **14** | 59,519 | 57,020 | 6,961 |
-| quiet | 3 | – | – | – | **3** | 27,569 | 26,709 | 3,363 |
-| sweep | 3 | – | – | – | **3** | 27,297 | 26,479 | 3,857 |
+| Scenario | Book invalid | Position limit | Gap: halt | Ignored while halted | **Total** | Time spent throwing in the run |
+|---|---|---|---|---|---|---|
+| basic | 2 | – | – | – | **2** | 41,916 |
+| empty_side | 9 | – | – | – | **9** | 51,666 |
+| gap | 2 | – | 1 | 6 | **9** | 49,291 |
+| loss | 10 | 13 | – | 10 | **33** | 110,290 |
+| position | 2 | 12 | – | – | **14** | 63,206 |
+| quiet | 3 | – | – | – | **3** | 24,458 |
+| sweep | 3 | – | – | – | **3** | 22,666 |
 
-Cost of one throw (all scenarios together):
+Cost of one throw (statistics over the throws of all 7 scenarios):
 
-| Throw | What the catch does | Mean | Median | Std dev |
-|---|---|---|---|---|
-| First throw of a run (the C++ runtime loads its unwinding tables) | skip tick | 21,291 | 20,020 | 4,742 |
-| Book invalid | skip tick | 3,208 | 2,875 | 647 |
-| Position limit | skip side | 2,864 | 2,708 | 572 |
-| Sequence gap | **halt** | 4,120 | 3,980 | 338 |
-| Sequence gap | ignore (already halted) | 3,635 | 3,458 | 1,375 |
-| Loss limit | ignore (already halted) | 3,511 | 3,375 | 752 |
+| Throw | What the catch does | Throws | Mean | Median | Std dev |
+|---|---|---|---|---|---|
+| First throw of a run (the C++ runtime loads its unwinding tables) | skip tick | 7 | 22,738 | 20,916 | 7,219 |
+| Book invalid | skip tick | 24 | 3,276 | 2,938 | 775 |
+| Position limit | skip side | 25 | 2,695 | 2,625 | 188 |
+| Sequence gap | **halt** | 1 | 4,250 | 4,250 | – (one throw) |
+| Sequence gap | ignore (already halted) | 6 | 3,396 | 3,354 | 98 |
+| Loss limit | ignore (already halted) | 10 | 3,371 | 3,354 | 82 |
 
 - **73 throws** in one run of the 7 scenarios; **72 of them just return**, only one halts.
 - In `gap` and `loss`, about half of all messages throw.
-- A throw costs ~3 µs (~20 µs for the first of a run); a typical message is handled in
+- A throw costs ~3 µs (~21 µs for the first of a run); a typical message is handled in
   ~0.04 µs. Nothing records these throws: `decisions.log` only shows orders and the halt.
 - The logging adds some overhead between throws; an isolated benchmark gives ~2 µs per throw.
 
@@ -284,45 +287,46 @@ handler out of line (*"ensure that error handling code will not be inlined"*).
 
 ### Result
 
-Both versions, 30 alternating runs per scenario. **Both send exactly the `.expected` orders
-in every scenario.** Times in ns.
+Both versions, one run per scenario; statistics over the messages or orders of that run.
+**Both send exactly the `.expected` orders in every scenario.** Times in ns.
 
 **Handler time** per market data message or exchange report (most failed checks happen on
 messages that send no order, so this is where their cost shows):
 
 | Scenario | Messages per run | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|
-| basic | 44 | 1,962 | 83 | 10,368 | 332 | 83 | 1,054 |
-| empty_side | 22 | 4,576 | 959 | 14,047 | 469 | 42 | 1,400 |
-| gap | 16 | 6,729 | 3,375 | 17,046 | 555 | 42 | 1,640 |
-| loss | 78 | 2,379 | 500 | 8,032 | 234 | 42 | 808 |
-| position | 87 | 1,504 | 83 | 7,880 | 247 | 42 | 750 |
-| quiet | 28 | 2,922 | 42 | 12,672 | 325 | 42 | 1,300 |
-| sweep | 39 | 2,366 | 42 | 11,722 | 345 | 42 | 1,094 |
+| basic | 44 | 2,100 | 83 | 11,222 | 384 | 83 | 1,212 |
+| empty_side | 22 | 4,102 | 1,042 | 12,203 | 884 | 42 | 3,203 |
+| gap | 16 | 6,068 | 4,646 | 12,632 | 547 | 42 | 1,601 |
+| loss | 78 | 2,064 | 480 | 5,593 | 208 | 42 | 649 |
+| position | 87 | 1,296 | 83 | 6,171 | 213 | 42 | 542 |
+| quiet | 28 | 2,217 | 42 | 9,361 | 238 | 42 | 967 |
+| sweep | 39 | 2,105 | 83 | 10,076 | 412 | 42 | 1,604 |
 
 **Tick-to-trade** per order:
 
 | Scenario | Orders per run | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|
-| basic | 14 | 1,109 | 458 | 1,687 | 1,227 | 417 | 2,022 |
-| empty_side | 6 | 2,220 | 938 | 2,355 | 2,321 | 958 | 2,499 |
-| gap | 4 | 4,939 | 4,584 | 1,196 | 2,983 | 1,958 | 2,897 |
-| loss | 21 | 1,307 | 458 | 1,666 | 957 | 375 | 1,689 |
-| position | 30 | 978 | 542 | 1,408 | 826 | 417 | 1,352 |
-| quiet | 2 | 5,403 | 5,083 | 2,007 | 5,753 | 5,667 | 1,786 |
-| sweep | 11 | 1,520 | 708 | 2,126 | 1,559 | 709 | 2,092 |
+| basic | 14 | 1,101 | 416 | 1,695 | 1,432 | 459 | 2,372 |
+| empty_side | 6 | 2,063 | 980 | 2,033 | 5,083 | 958 | 6,723 |
+| gap | 4 | 4,822 | 5,270 | 1,316 | 2,958 | 2,542 | 3,096 |
+| loss | 21 | 1,161 | 417 | 1,278 | 873 | 375 | 1,302 |
+| position | 30 | 889 | 500 | 1,117 | 699 | 396 | 899 |
+| quiet | 2 | 3,708 | 3,708 | 1,296 | 4,250 | 4,250 | 1,237 |
+| sweep | 11 | 1,341 | 708 | 1,628 | 2,163 | 708 | 3,441 |
 
 ### Conclusions
 
 - **The design doc's premise fails in practice.** The exceptions are thrown on routine
-  messages, 72 of 73 times only to return, at ~3 µs each (~20 µs the first time).
+  messages, 72 of 73 times only to return, at ~3 µs each (~21 µs the first time).
 - **Error flags remove that cost without changing a single order.** Mean handler time falls
-  6–12× in every scenario and its standard deviation ~10×; in `gap`, the median falls from
-  3,375 ns to 42 ns.
+  5–11× in every scenario and its standard deviation 4–11×; in `gap`, the median falls from
+  4,646 ns to 42 ns.
 - **Tick-to-trade improves where an order follows a failed check:** the halt's cancels in
-  `gap` (median 4,584 → 1,958 ns), and the asks quoted while the bid is blocked in `loss` and
+  `gap` (median 5,270 → 2,542 ns), and the asks quoted while the bid is blocked in `loss` and
   `position`. Elsewhere no check fails on the way to an order, so it is unchanged within noise.
-- `quiet` sends only its 2 cold first quotes, so its tick-to-trade is noise.
+- Single-run noise: in `empty_side` and `sweep` one slow order raises the error-flags mean
+  and std dev, while the medians are unchanged. `quiet` sends only its 2 cold first quotes.
 
 ---
 

@@ -48,7 +48,7 @@ def main():
         sd = statistics.stdev(values) if len(values) > 1 else 0.0
         return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f} | {sd:,.0f}"
 
-    print(f"Tick-to-trade per order, in ns, over {runs} runs of each version.\n")
+    print(f"Tick-to-trade per order, in ns. Statistics are over the orders of {runs} run(s) of each version.\n")
     print("| Scenario | Orders per run | Same orders as .expected (stored top / full scan) "
           "| Stored top: mean | Stored top: median | Stored top: std dev "
           "| Full scan: mean | Full scan: median | Full scan: std dev |")
