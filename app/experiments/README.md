@@ -122,7 +122,7 @@ Times in ns; mean, median and standard deviation over the two-order deliveries o
 - A delivery with two orders gives two latencies; a delivery with none gives none.
 - Counts every order the app sends, including the loss-limit halt's cancels, which the
   timer triggers.
-- Reports the count, mean, median and standard deviation over the orders of the run,
+- Reports the count, mean, median and standard deviation of tick-to-trade latency over the orders of the run,
   e.g. for `basic`: `corrected tick-to-trade: 14 orders, mean 1104 ns, median 438 ns, std dev 1740 ns`.
 
 **Result.** The original report's samples vs. the corrected samples (ns; statistics over the deliveries and the orders of one run):
@@ -141,12 +141,12 @@ Times in ns; mean, median and standard deviation over the two-order deliveries o
 
 - **The original mostly measures non-trading work.** Its median sample (42 to 83 ns) is a
   delivery that sent nothing; a typical order takes 375 to 5,750 ns.
-- **Its mean is unreliable.** Its standard deviation is 3.4 to 6 times its mean, because a few
-  cold deliveries of tens of µs dominate.
-- **Its error has no fixed direction.** In `gap`, `quiet` and `sweep` the original mean is
-  below the true tick-to-trade (diluted by cheap no-order samples); in the other four it is
-  above. The result depends on the scenario's mix of events, not only on the app's speed.
-
+- **A mean alone is not reliable.** A few slow orders (e.g. the cold first quotes) pull the
+  mean tick-to-trade up, so the corrected report also gives the median and standard
+  deviation over the orders.
+- In `gap`, `quiet` and `sweep` the original reported latency (mean tick-to-trade latency) is
+  below the true mean tick-to-trade (diluted by cheap no-order samples); in the other four it is
+  above.
 ---
 
 ## 2. Cached top of book
