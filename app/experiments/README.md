@@ -285,7 +285,7 @@ sendOrderToExchange(); else HandleError(errorFlags);"*.
 - **Metrics** (ns; mean, median and std dev over the run's messages or orders):
   - **Handler time** per market data message or exchange report (tap arrival → end of the
     handler). Most failed checks happen on messages that send **no order**, so this is where
-    the exception cost shows.
+    the exception cost shows. So tick-to-trade which only measures orders, cannot capture their cost; handler time does.
   - **Tick-to-trade** per order (tap arrival → order sent). The assignment's metric; it can
     only change where an order is sent **after** a failed check.
 
