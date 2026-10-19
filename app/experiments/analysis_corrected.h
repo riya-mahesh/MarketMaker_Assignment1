@@ -18,27 +18,47 @@
 // cancels).
 #pragma once
 
-#include <cstdint>
+#include <algorithm>
+#include <cmath>
 #include <ostream>
+#include <vector>
 
 #include "sim/runtime/capture.h"
 
 namespace app {
 
 inline void PrintTickToTradeReport(const sim::Capture& capture, std::ostream& out) {
-    double total_ns = 0;
-    std::uint64_t count = 0;
+    std::vector<double> latencies;
     for (const sim::SendRecord& s : capture.sends) {
         if (s.delivery_index >= capture.deliveries.size()) {
             continue;  // only if a callback threw before its delivery was recorded
         }
         const sim::DeliveryRecord& d = capture.deliveries[s.delivery_index];
-        total_ns += static_cast<double>(s.time - d.entry);
-        ++count;
+        latencies.push_back(static_cast<double>(s.time - d.entry));
     }
 
-    out << "corrected tick-to-trade: " << count << " orders, mean "
-        << (count > 0 ? total_ns / static_cast<double>(count) : 0.0) << " ns\n";
+    out << "corrected tick-to-trade: " << latencies.size() << " orders";
+    if (!latencies.empty()) {
+        const double n = static_cast<double>(latencies.size());
+        double total = 0;
+        for (const double l : latencies) {
+            total += l;
+        }
+        const double mean = total / n;
+        double squares = 0;
+        for (const double l : latencies) {
+            squares += (l - mean) * (l - mean);
+        }
+        // Sample standard deviation (n - 1); 0 for a single order.
+        const double stddev = latencies.size() > 1 ? std::sqrt(squares / (n - 1)) : 0.0;
+        std::sort(latencies.begin(), latencies.end());
+        const std::size_t mid = latencies.size() / 2;
+        const double median = latencies.size() % 2 == 1
+                                  ? latencies[mid]
+                                  : (latencies[mid - 1] + latencies[mid]) / 2;
+        out << ", mean " << mean << " ns, median " << median << " ns, std dev " << stddev << " ns";
+    }
+    out << '\n';
 }
 
 }  // namespace app

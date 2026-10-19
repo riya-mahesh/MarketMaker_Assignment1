@@ -5,7 +5,8 @@
 #   stored_top  the app as it is (build/market_maker, built by make)
 #   full_scan   the same app linked with full_scan/app/market_data/book.{h,cpp}
 # then runs measure.py, which checks both send exactly the .expected orders and
-# reports mean and median tick-to-trade per scenario.
+# reports mean, median and standard deviation of tick-to-trade per scenario.
+# A copy of the table goes to build/experiments/top_of_book/results.md.
 #
 #   sh app/experiments/top_of_book/run.sh            # 30 runs per version per scenario
 #   RUNS=10 sh app/experiments/top_of_book/run.sh
@@ -24,4 +25,4 @@ ${CXX:-c++} -std=c++20 -O2 -g -Wall -Wextra -Wpedantic -I "$EXP/full_scan" -I . 
     "$EXP/full_scan/app/market_data/book.cpp" build/libsim.a \
     -o "$OUT/market_maker_full_scan"
 
-python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-30}" | tee "$EXP/results.md"
+python3 -I "$EXP/measure.py" "$OUT" "${RUNS:-30}" | tee "$OUT/results.md"

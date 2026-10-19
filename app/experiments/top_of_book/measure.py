@@ -45,12 +45,14 @@ def main():
                 results[(v, scn.stem)] += tick_to_trade(run_dir / "capture.csv")
 
     def cells(values):
-        return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f}"
+        sd = statistics.stdev(values) if len(values) > 1 else 0.0
+        return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f} | {sd:,.0f}"
 
     print(f"Tick-to-trade per order, in ns, over {runs} runs of each version.\n")
     print("| Scenario | Orders per run | Same orders as .expected (stored top / full scan) "
-          "| Stored top: mean | Stored top: median | Full scan: mean | Full scan: median |")
-    print("|---|---|---|---|---|---|---|")
+          "| Stored top: mean | Stored top: median | Stored top: std dev "
+          "| Full scan: mean | Full scan: median | Full scan: std dev |")
+    print("|---|---|---|---|---|---|---|---|---|")
     for scn in scenarios:
         s = scn.stem
         same = " / ".join("yes" if orders_match[(v, s)] else "NO" for v in VERSIONS)

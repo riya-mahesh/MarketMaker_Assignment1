@@ -58,13 +58,15 @@ def main():
                 handler[(v, scn.stem)] += b
 
     def cells(values):
-        return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f}"
+        sd = statistics.stdev(values) if len(values) > 1 else 0.0
+        return f"{statistics.mean(values):,.0f} | {statistics.median(values):,.0f} | {sd:,.0f}"
 
     def table(title, data, unit_label):
         print(f"\n{title}\n")
-        heads = " | ".join(f"{LABELS[v]}: mean | {LABELS[v]}: median" for v in VERSIONS)
+        heads = " | ".join(f"{LABELS[v]}: mean | {LABELS[v]}: median | {LABELS[v]}: std dev"
+                           for v in VERSIONS)
         print(f"| Scenario | {unit_label} per run | Same orders as .expected | {heads} |")
-        print("|---|---|---|" + "---|" * (2 * len(VERSIONS)))
+        print("|---|---|---|" + "---|" * (3 * len(VERSIONS)))
         for scn in scenarios:
             s = scn.stem
             same = "yes" if all(orders_match[(v, s)] for v in VERSIONS) else "NO"
