@@ -247,7 +247,7 @@ and 208 ns without.
 **Run it.**
 
 ```sh
-sh app/experiments/risk_checks/count_throws.sh   # counts and times every throw -> throws.md
+sh app/experiments/risk_checks/count_throws.sh   # counts and times every throw -> throws_data.md (report: throws.md)
 sh app/experiments/risk_checks/run.sh            # three versions compared   -> results.md
 ```
 
