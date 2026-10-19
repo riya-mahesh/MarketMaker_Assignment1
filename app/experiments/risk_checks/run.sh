@@ -3,7 +3,7 @@
 #
 # Builds two versions of build/market_maker:
 #   baseline    the app as it is (build/market_maker, built by make)
-#   cook_flags  Cook's "slowpath removal": all checks in one flags word, one branch,
+#   error_flags Cook's "slowpath removal": all checks in one flags word, one branch,
 #               and an out-of-line handler for the rare cases
 # then runs measure.py, which checks both send exactly the .expected orders
 # and reports mean, median and standard deviation of tick-to-trade and handler
@@ -21,7 +21,7 @@ mkdir -p "$OUT"
 make build/market_maker
 cp build/market_maker "$OUT/market_maker_baseline"
 
-for v in cook_flags; do
+for v in error_flags; do
     ${CXX:-c++} -std=c++20 -O2 -g -Wall -Wextra -Wpedantic -I "$EXP/$v" -I . \
         app/main.cpp "$EXP/$v/app/market_maker.cpp" app/execution/orders.cpp \
         app/market_data/book.cpp build/libsim.a \

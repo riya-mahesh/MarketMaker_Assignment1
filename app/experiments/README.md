@@ -8,7 +8,7 @@ version sends exactly the orders in `sim/fixtures/*.expected`.
 |---|---|---|---|
 | 1 | [Corrected evaluation](#1-corrected-evaluation) | §2.1 Evaluation (flaw) | The original report takes one end time per delivery and averages deliveries that sent no order; per-order tick-to-trade fixes both |
 | 2 | [Cached top of book](#2-cached-top-of-book) | §2.2.1 Top of book (good decision) | Searching the price ladder instead makes the median order ~129× slower |
-| 3 | [Risk checks](#3-risk-checks-exceptions-vs-error-flags) | §2.2.3 Risk checks (flaw) | Exceptions are thrown on routine messages; Cook's error flags make message handling 5–11× faster |
+| 3 | [Risk checks](#3-risk-checks-exceptions-vs-error-flags) | §2.2.3 Risk checks (flaw) | Exceptions are thrown on routine messages; Cook's error flags make message handling 5–13× faster |
 
 All results below come from **one run** of each scenario per version (all scripts run back to back).
 
@@ -213,125 +213,116 @@ Tick-to-trade per order, in ns:
 
 ## 3. Risk checks: exceptions vs. error flags
 
-**Files:** `risk_checks/` (instrumented build, fixed build, measurements).
+**Files:** `risk_checks/`: `instrumented/` + `count_throws.sh` (experiment A), `error_flags/`
+(the fix) + `run.sh` (experiment B).
 
-### The decision (design doc §2.2.3, "Risk checks")
+### The decision and why we test it
 
-- Every failed risk check **throws an exception**, which the quoting code catches.
-- The design doc's argument: exceptions "are free when not thrown, and once they are thrown,
-  we are no longer in the hotpath."
+- Design doc §2.2.3: every failed risk check **throws** a `RiskViolation`, which `Requote()` or
+  `QuoteSide()` catches to skip the message, block one side, or halt.
+- Its argument: exceptions "are free when not thrown, and once they are thrown, we are no
+  longer in the hotpath." That holds only if checks rarely fail: a throw allocates the
+  exception and unwinds the stack to the `catch`, all before the handler can continue.
 
-| Check | Fails when | What the app then does |
+| Check | Fails when | The `catch` then |
 |---|---|---|
-| Book invalid | One side of the book is empty, or bid ≥ ask | Skips this message; quotes stay |
-| Position limit | Quoting 100 more shares would pass ±500 | Skips that side; the other side still quotes |
-| Sequence gap | A market data message was missed | **Halts** (cancels all orders) the first time; ignores every later message |
-| Loss limit | The loss passes $100 (detected on the timer) | Ignores every later message (the halt itself needs no exception) |
+| Book invalid | A side of the book is empty, or bid ≥ ask | Returns: skip this message |
+| Position limit | 100 more shares would pass ±500 | Returns: skip that side; the other side still quotes |
+| Sequence gap | A market data message was missed | **Halts** the first time; returns on every later message |
+| Loss limit | The loss passes $100 (found on the timer) | Returns on every later message |
 
-The app's other exceptions (`std::out_of_range` from the book, `std::invalid_argument` from
-decoding, `std::runtime_error` from the decision log) are fatal errors that never occur here.
+### Experiment A: how often do the checks throw, and what does one throw cost?
 
-### Flaw: the exceptions are thrown on routine messages
+- **How:** `instrumented/` adds two clock reads to the app: just before each `throw`, and on
+  the first line of its `catch` (the log line is printed after the second read, so it is not
+  timed). One run per scenario.
+- **Metric:** the time between the two reads, per throw: the exception's own cost (allocation
+  and unwinding), which is exactly what the design doc calls free.
 
-- **Book invalid** throws on every message while a side of the book is empty: the start of
-  every scenario, and `empty_side` from 5 to 12 ms.
-- **Position limit** throws on every message while the position is at the limit, in
-  `QuoteSide(Buy)`, **before** the ask is quoted (`position`, `loss`).
-- **Sequence gap / loss limit** throw on every message for the rest of the run after a halt,
-  and the halt's cancels are sent from inside the `catch` (`gap`, `loss`).
-- Each throw allocates the exception object and unwinds the stack, so "no longer in the
-  hotpath" does not hold: the next order, or the next message, waits for it.
+Throws in one run, by check, and the total time spent throwing (ns):
 
-**Evidence.** `instrumented/` adds logging to `risk.h` and `market_maker.cpp`: each throw
-records the time just before `throw`, and each `catch` reports the exception, what it does
-with it, and the time elapsed. One run per scenario; times in ns.
-
-Throws in the run (the counts are identical every run):
-
-| Scenario | Book invalid | Position limit | Gap: halt | Ignored while halted | **Total** | Time spent throwing in the run |
+| Scenario | Book invalid | Position limit | Gap: halt | Ignored while halted | Total throws | Time spent throwing |
 |---|---|---|---|---|---|---|
-| basic | 2 | – | – | – | **2** | 41,916 |
-| empty_side | 9 | – | – | – | **9** | 51,666 |
-| gap | 2 | – | 1 | 6 | **9** | 49,291 |
-| loss | 10 | 13 | – | 10 | **33** | 110,290 |
-| position | 2 | 12 | – | – | **14** | 63,206 |
-| quiet | 3 | – | – | – | **3** | 24,458 |
-| sweep | 3 | – | – | – | **3** | 22,666 |
+| basic | 2 | – | – | – | 2 | 81,000 |
+| empty_side | 9 | – | – | – | 9 | 54,124 |
+| gap | 2 | – | 1 | 6 | 9 | 66,043 |
+| loss | 10 | 13 | – | 10 | 33 | 121,086 |
+| position | 2 | 12 | – | – | 14 | 61,418 |
+| quiet | 3 | – | – | – | 3 | 41,167 |
+| sweep | 3 | – | – | – | 3 | 32,708 |
 
-Cost of one throw (statistics over the throws of all 7 scenarios):
+Cost of one throw, over the throws of all 7 scenarios (ns):
 
-| Throw | What the catch does | Throws | Mean | Median | Std dev |
-|---|---|---|---|---|---|
-| First throw of a run (the C++ runtime loads its unwinding tables) | skip tick | 7 | 22,738 | 20,916 | 7,219 |
-| Book invalid | skip tick | 24 | 3,276 | 2,938 | 775 |
-| Position limit | skip side | 25 | 2,695 | 2,625 | 188 |
-| Sequence gap | **halt** | 1 | 4,250 | 4,250 | – (one throw) |
-| Sequence gap | ignore (already halted) | 6 | 3,396 | 3,354 | 98 |
-| Loss limit | ignore (already halted) | 10 | 3,371 | 3,354 | 82 |
+| Throw | Throws | Mean | Median | Std dev |
+|---|---|---|---|---|
+| First throw of a run (the runtime loads its unwinding tables) | 7 | 33,167 | 26,375 | 17,436 |
+| Book invalid | 24 | 3,839 | 3,375 | 1,427 |
+| Position limit | 25 | 2,683 | 2,625 | 161 |
+| Gap, leading to the halt | 1 | 5,667 | 5,667 | – |
+| Ignored while halted (gap) | 6 | 4,417 | 4,646 | 411 |
+| Ignored while halted (loss limit) | 10 | 3,400 | 3,354 | 202 |
 
-- **73 throws** in one run of the 7 scenarios; **72 of them just return**, only one halts.
-- In `gap` and `loss`, about half of all messages throw.
-- A throw costs ~3 µs (~21 µs for the first of a run); a typical message is handled in
-  ~0.04 µs. Nothing records these throws: `decisions.log` only shows orders and the halt.
-- The logging adds some overhead between throws; an isolated benchmark gives ~2 µs per throw.
+- **73 throws** across the 7 scenarios, and **72 of them just return**; only one halts.
+- A throw costs ~3 µs (~26 µs for the first of a run), against ~0.04 µs to handle a
+  typical message. In `gap` and `loss` about half of all messages throw.
+- Some throws sit directly on the order path: the position check throws **before** the ask is
+  quoted, and the halt's cancels are sent from **inside** the `catch`.
 
-### Fix: error flags (`cook_flags/`)
+### The fix: error flags (`error_flags/`)
 
-From Carl Cook's CppCon 2017 talk, slide 16 ("Slowpath removal"): instead of handling each
-error where it is found, collect them into one `errorFlags` value and write
-*"if (!errorFlags) sendOrderToExchange(); else HandleError(errorFlags);"*, keeping the
-handler out of line (*"ensure that error handling code will not be inlined"*).
+Carl Cook's "slowpath removal" (CppCon 2017, slide 16): *"if (!errorFlags)
+sendOrderToExchange(); else HandleError(errorFlags);"*.
 
-- **One number for all checks.** `RiskGate::Flags()` evaluates the same four conditions and
-  sets one bit per failure; nothing is thrown.
-- **One branch on the quoting path.** `Requote()` tests that number once; the two per-side
-  position checks become two bit tests.
-- **Rare cases out of line.** Halting and "nothing to do" go to `HandleRiskFlags()`, marked
-  `[[gnu::noinline, gnu::cold]]`.
-- **Same behaviour.** Same checks, same order, same outcomes.
+- `RiskGate::Flags()` evaluates the **same four checks** and sets **one bit per failure** in a
+  single number; nothing is thrown.
+- `Requote()` makes **one branch** on that number; a blocked side is a bit test.
+- The rare work (halting) is in `HandleRiskFlags()`, kept out of line (`[[gnu::noinline,
+  gnu::cold]]`). Same checks, same order, same outcomes.
 
-### Result
+### Experiment B: exceptions vs. error flags
 
-Both versions, one run per scenario; statistics over the messages or orders of that run.
-**Both send exactly the `.expected` orders in every scenario.** Times in ns.
+- **How:** both versions run every scenario once; every run's orders match `.expected` for both.
+- **Metrics** (ns; mean, median and std dev over the run's messages or orders):
+  - **Handler time** per market data message or exchange report (tap arrival → end of the
+    handler). Most failed checks happen on messages that send **no order**, so this is where
+    the exception cost shows.
+  - **Tick-to-trade** per order (tap arrival → order sent). The assignment's metric; it can
+    only change where an order is sent **after** a failed check.
 
-**Handler time** per market data message or exchange report (most failed checks happen on
-messages that send no order, so this is where their cost shows):
+Handler time:
 
-| Scenario | Messages per run | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
+| Scenario | Messages | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev | Mean faster by |
+|---|---|---|---|---|---|---|---|---|
+| basic | 44 | 2,192 | 83 | 11,869 | 419 | 83 | 1,449 | 5× |
+| empty_side | 22 | 5,585 | 1,125 | 18,388 | 492 | 42 | 1,422 | 11× |
+| gap | 16 | 7,700 | 3,417 | 20,620 | 612 | 42 | 2,074 | 13× |
+| loss | 78 | 3,065 | 458 | 9,389 | 257 | 42 | 1,018 | 12× |
+| position | 87 | 1,666 | 83 | 9,266 | 247 | 42 | 734 | 7× |
+| quiet | 28 | 3,333 | 42 | 14,752 | 326 | 42 | 1,391 | 10× |
+| sweep | 39 | 2,409 | 42 | 11,829 | 323 | 42 | 941 | 7× |
+
+Tick-to-trade:
+
+| Scenario | Orders | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|
-| basic | 44 | 2,100 | 83 | 11,222 | 384 | 83 | 1,212 |
-| empty_side | 22 | 4,102 | 1,042 | 12,203 | 884 | 42 | 3,203 |
-| gap | 16 | 6,068 | 4,646 | 12,632 | 547 | 42 | 1,601 |
-| loss | 78 | 2,064 | 480 | 5,593 | 208 | 42 | 649 |
-| position | 87 | 1,296 | 83 | 6,171 | 213 | 42 | 542 |
-| quiet | 28 | 2,217 | 42 | 9,361 | 238 | 42 | 967 |
-| sweep | 39 | 2,105 | 83 | 10,076 | 412 | 42 | 1,604 |
-
-**Tick-to-trade** per order:
-
-| Scenario | Orders per run | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
-|---|---|---|---|---|---|---|---|
-| basic | 14 | 1,101 | 416 | 1,695 | 1,432 | 459 | 2,372 |
-| empty_side | 6 | 2,063 | 980 | 2,033 | 5,083 | 958 | 6,723 |
-| gap | 4 | 4,822 | 5,270 | 1,316 | 2,958 | 2,542 | 3,096 |
-| loss | 21 | 1,161 | 417 | 1,278 | 873 | 375 | 1,302 |
-| position | 30 | 889 | 500 | 1,117 | 699 | 396 | 899 |
-| quiet | 2 | 3,708 | 3,708 | 1,296 | 4,250 | 4,250 | 1,237 |
-| sweep | 11 | 1,341 | 708 | 1,628 | 2,163 | 708 | 3,441 |
+| basic | 14 | 1,050 | 396 | 1,564 | 1,601 | 416 | 2,915 |
+| empty_side | 6 | 2,910 | 1,062 | 3,191 | 2,417 | 1,042 | 2,571 |
+| gap | 4 | 5,344 | 4,834 | 1,077 | 3,812 | 3,312 | 4,048 |
+| loss | 21 | 1,516 | 417 | 1,997 | 1,192 | 375 | 2,278 |
+| position | 30 | 1,061 | 500 | 1,663 | 808 | 417 | 1,322 |
+| quiet | 2 | 5,583 | 5,583 | 1,237 | 6,292 | 6,292 | 1,532 |
+| sweep | 11 | 1,773 | 709 | 2,657 | 1,371 | 625 | 1,758 |
 
 ### Conclusions
 
-- **The design doc's premise fails in practice.** The exceptions are thrown on routine
-  messages, 72 of 73 times only to return, at ~3 µs each (~21 µs the first time).
-- **Error flags remove that cost without changing a single order.** Mean handler time falls
-  5–11× in every scenario and its standard deviation 4–11×; in `gap`, the median falls from
-  4,646 ns to 42 ns.
+- **The design doc's premise fails:** the checks throw on routine messages (72 of 73 throws
+  only return), at ~3 µs each, often right before an order.
+- **Error flags remove that cost without changing a single order:** mean handler time falls
+  5–13× in every scenario, with far less spread (std dev 8–13× lower).
 - **Tick-to-trade improves where an order follows a failed check:** the halt's cancels in
-  `gap` (median 5,270 → 2,542 ns), and the asks quoted while the bid is blocked in `loss` and
-  `position`. Elsewhere no check fails on the way to an order, so it is unchanged within noise.
-- Single-run noise: in `empty_side` and `sweep` one slow order raises the error-flags mean
-  and std dev, while the medians are unchanged. `quiet` sends only its 2 cold first quotes.
+  `gap` (median 4,834 → 3,312 ns) and the asks quoted while the bid is blocked in `loss` and
+  `position`. Elsewhere it is unchanged within single-run noise (e.g. one slow order raises
+  `basic`'s error-flags mean; `quiet` sends only its 2 cold first quotes).
 
 ---
 

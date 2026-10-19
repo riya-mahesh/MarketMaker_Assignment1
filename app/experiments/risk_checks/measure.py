@@ -17,8 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSIONS = ["baseline", "cook_flags"]
-LABELS = {"baseline": "Exceptions (baseline)", "cook_flags": "Error flags (fix)"}
+VERSIONS = ["baseline", "error_flags"]
+LABELS = {"baseline": "Exceptions (baseline)", "error_flags": "Error flags (fix)"}
 
 
 def timings(run_dir):
