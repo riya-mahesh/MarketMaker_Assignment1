@@ -64,22 +64,31 @@ every run of `build/market_maker`), `evaluation/` (measurement).
 - `analysis.h` then counts **one** matched latency sample per delivery, t(handler end) − t(tick): it ends
   after both orders and the work that follows them, and counts 1 sample instead of 2 orders.
 
-**Evidence.** Deliveries that sent a bid and an ask (ns, 30 runs):
+- **Bid sent:** when the bid left (the tap's `Send` time). This is the bid's tick-to-trade.
+- **Ask sent:** when the ask left. This is the ask's tick-to-trade.
+- **Handler finished:** when `latency_.Record()` ran at the end of the handler. This is the
+  single number the original report counts for the delivery.
 
-| Scenario | Such deliveries per run | Original sample (handler end): mean | Median | Std dev | Bid tick-to-trade: mean | Median | Std dev | Ask tick-to-trade: mean | Median | Std dev |
+Times in ns, mean, median, standard deviation across 30 runs:
+
+| Scenario | No of deliveries with 2 orders per run| Bid sent: mean | Median | Std dev | Ask sent: mean | Median | Std dev | Handler finished (original report): mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|---|---|---|
-| basic | 3 | 2,158 | 750 | 2,092 | 1,294 | 375 | 1,397 | 2,107 | 708 | 2,091 |
-| empty_side | 3 | 2,475 | 1,125 | 2,148 | 1,516 | 708 | 1,383 | 2,421 | 1,083 | 2,141 |
-| gap | 2 | 4,910 | 4,688 | 663 | 3,752 | 4,062 | 991 | 4,794 | 4,584 | 674 |
-| loss | 5 | 1,825 | 896 | 2,097 | 1,051 | 375 | 1,531 | 1,784 | 875 | 2,085 |
-| position | 11 | 1,185 | 709 | 1,414 | 642 | 333 | 967 | 1,141 | 667 | 1,411 |
-| quiet | 1 | 5,583 | 4,874 | 1,481 | 3,579 | 3,021 | 1,436 | 5,533 | 4,833 | 1,481 |
-| sweep | 5 | 1,731 | 834 | 1,867 | 1,044 | 459 | 1,270 | 1,693 | 792 | 1,868 |
+| basic | 3 | 1,294 | 375 | 1,397 | 2,107 | 708 | 2,091 | 2,158 | 750 | 2,092 |
+| empty_side | 3 | 1,516 | 708 | 1,383 | 2,421 | 1,083 | 2,141 | 2,475 | 1,125 | 2,148 |
+| gap | 2 | 3,752 | 4,062 | 991 | 4,794 | 4,584 | 674 | 4,910 | 4,688 | 663 |
+| loss | 5 | 1,051 | 375 | 1,531 | 1,784 | 875 | 2,085 | 1,825 | 896 | 2,097 |
+| position | 11 | 642 | 333 | 967 | 1,141 | 667 | 1,411 | 1,185 | 709 | 1,414 |
+| quiet | 1 | 3,579 | 3,021 | 1,436 | 5,533 | 4,833 | 1,481 | 5,583 | 4,874 | 1,481 |
+| sweep | 5 | 1,044 | 459 | 1,270 | 1,693 | 792 | 1,868 | 1,731 | 834 | 1,867 |
 
 - The original's single sample is later than **both** orders: in `basic`, a median 750 ns
   where the bid actually left after 375 ns and the ask after 708 ns.
-- The bid, the order that leaves first, is overstated 1.6× to 2.4× (median) in every
-  scenario except `gap`, whose two-order deliveries are its cold first quotes.
+- It is effectively the **ask's** tick-to-trade: once the ask is sent, the handler only
+  returns and reads the clock, so "handler finished" lands one clock step (~42 ns) later.
+- The ~330 ns between the bid and the ask is the ask's pre-send work: its quote-history
+  entry, its `fprintf` to `decisions.log`, and building the message.
+- The bid, the order that leaves first, is overstated 1.6× to 2.4× (median) in most scenarios.
+
 
 ### Flaw 2: deliveries with no trading decision are averaged in
 
