@@ -207,11 +207,8 @@ Tick-to-trade per order, in ns:
 - **The saving is smaller where orders skip the lookup.** In `gap`, half the orders are the
   halt's cancels, which are sent before the top of book is read; `quiet`'s two orders are its
   cold first quotes, which are slow in both versions.
-- **It matches industry practice:** the QuantCup 1 winning order book also keeps
+- **It matches approach adopted by a few other sources:** the QuantCup 1 winning order book also keeps
   `bidMax`/`askMin` over a price-indexed array.
-- **Caveat:** the full scan is the literal, worst-case "search the book". A search starting
-  near the current prices would close much of the gap in these short, calm scenarios.
-
 ---
 
 ## 3. Risk checks: exceptions vs. error flags
