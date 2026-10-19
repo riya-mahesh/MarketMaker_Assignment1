@@ -100,7 +100,7 @@ flowchart TD
     T -- yes --> RP["Send ReplaceOrder: new price, full size<br/>(tap stamps departure)"]
 ```
 
-**Every possible execution:**
+**Possible execution:**
 
 | Trigger | Path through the code | Orders sent | Example |
 |---|---|---|---|
