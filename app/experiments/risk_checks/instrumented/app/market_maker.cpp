@@ -1,7 +1,8 @@
 // This file was generated with the help of Claude Code.
 //
 // EXPERIMENT INSTRUMENTATION: app/market_maker.cpp, unchanged except that each
-// catch first calls ThrowProbe::Caught() with what it is about to do.
+// catch first calls ThrowProbe::Caught() with what it is about to do, and each
+// handler starts by clearing ThrowProbe::thrown_in_handler.
 
 #include "app/market_maker.h"
 
@@ -15,6 +16,7 @@ namespace md = sim::md;
 namespace oe = sim::oe;
 
 void MarketMaker::OnMarketData(std::span<const std::byte> bytes) {
+    ThrowProbe::thrown_in_handler = false;
     const auto header = sim::Decode<md::Header>(bytes.first(sizeof(md::Header)));
     if (header.sequence != next_sequence_) {
         risk_.LatchSequenceGap();
@@ -44,6 +46,7 @@ void MarketMaker::OnMarketData(std::span<const std::byte> bytes) {
 }
 
 void MarketMaker::OnExecutionReport(std::span<const std::byte> bytes) {
+    ThrowProbe::thrown_in_handler = false;
     const auto header = sim::Decode<oe::ReportHeader>(bytes.first(sizeof(oe::ReportHeader)));
     switch (header.type) {
         case oe::OutboundType::Accepted: {
@@ -115,6 +118,7 @@ void MarketMaker::QuoteSide(sim::Side side, sim::Price desired) {
 }
 
 void MarketMaker::OnTimer(sim::Timestamp now) {
+    ThrowProbe::thrown_in_handler = false;
     const BookTop& top = book_.top();
     if (top.Valid()) {
         sampled_mid_ = (top.bid_price + top.ask_price) / 2;

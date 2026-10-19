@@ -3,7 +3,9 @@
 // EXPERIMENT INSTRUMENTATION: app/risk/risk.h, unchanged except that every
 // throw records the wall time just before it, and ThrowProbe::Caught() (called
 // first thing in each catch) reports the throw's type, what the catch did, and
-// how long the throw took, one line per throw on stderr.
+// how long the throw took, one line per throw on stderr. instrumented/app/execution/
+// orders.cpp also prints one SEND line per order, saying whether it was sent after a
+// throw in the same handler.
 //
 // Pre-trade risk checks.
 //
@@ -48,7 +50,11 @@ private:
 // Wall time taken just before the most recent throw.
 struct ThrowProbe {
     static inline sim::WallTime start = 0;
+    // True once a throw has been caught in the handler currently running; reset at the
+    // start of every handler. Orders sent while it is true were sent after a throw.
+    static inline bool thrown_in_handler = false;
     static void Caught(RiskError error, const char* action) {
+        thrown_in_handler = true;
         static constexpr const char* kNames[] = {"BookInvalid", "SequenceGap", "PositionLimit", "LossLimitBreached"};
         const sim::WallTime ns = sim::WallClockNow() - start;
         std::fprintf(stderr, "THROW %s %s %lld\n", kNames[static_cast<int>(error)], action, static_cast<long long>(ns));

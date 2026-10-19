@@ -39,7 +39,8 @@ All results below come from **one run** of each scenario per version (all script
 sh app/experiments/evaluation/run.sh            # 1. original vs. corrected report
 sh app/experiments/top_of_book/run.sh           # 2. cached top of book vs. full scan
 sh app/experiments/risk_checks/count_throws.sh  # 3. how often exceptions are thrown, and their cost
-sh app/experiments/risk_checks/run.sh           # 3. exceptions vs. error flags
+sh app/experiments/risk_checks/run.sh           # 3. exceptions vs. error flags: handler time
+sh app/experiments/risk_checks/orders_after_throw.sh  # 3. tick-to-trade of orders sent after a throw
 ```
 
 Each script prints its tables and saves a copy under `build/experiments/`.
@@ -214,7 +215,7 @@ Tick-to-trade per order, in ns:
 ## 3. Risk checks: exceptions vs. error flags
 
 **Files:** `risk_checks/`: `instrumented/` + `count_throws.sh` (experiment A), `error_flags/`
-(the fix) + `run.sh` (experiment B).
+(the fix) + `run.sh` (experiment B), `orders_after_throw.sh` (experiment C).
 
 ### The decision and why we test it
 
@@ -286,7 +287,8 @@ sendOrderToExchange(); else HandleError(errorFlags);"*.
   - **Handler time** per market data message or exchange report (tap arrival → end of the
     handler). Failed checks happen on messages that send **no order** too, so this is where
     the exception cost shows. So tick-to-trade which only measures orders, cannot capture their cost; handler time does.
-  - **Tick-to-trade** per order (tap arrival → order sent). A more useful metric as it captures the latency in the hot path due to failures. The assignment's metric; it can only change where an order is sent **after** a failed check.
+  - Tick-to-trade can only change for orders sent **after** a failed check, so it is
+    measured on exactly those orders in experiment C.
 
 Handler time:
 
@@ -300,17 +302,44 @@ Handler time:
 | quiet | 28 | 3,333 | 42 | 14,752 | 326 | 42 | 1,391 | 10× |
 | sweep | 39 | 2,409 | 42 | 11,829 | 323 | 42 | 941 | 7× |
 
-Tick-to-trade:
+### Experiment C: tick-to-trade of the orders sent after a throw
 
-| Scenario | Orders | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
+- **Why:** this is the direct hot-path cost. Some orders are sent in the same handler **after**
+  a check has thrown: the ask after the bid's position check fails (`loss`, `position`), and
+  the halt's cancels, sent from inside the `catch` (`gap`). Their tick-to-trade includes the
+  throw. Over all orders this effect is diluted, so these orders are measured on their own.
+- **How:** the `instrumented/` build labels each order: a flag is cleared at the start of every
+  handler and set when a throw is caught, and each order logs the flag before it is sent. Both
+  timed versions send the same orders in the same sequence, so the labels apply to them order
+  by order. The labelling build is never timed.
+- **Metric:** tick-to-trade per order (tap arrival → order sent), exceptions vs. error flags,
+  for the labelled orders and, as a control, for all other orders. One run; ns.
+
+Orders sent after a throw in the same handler:
+
+| Scenario | Such orders | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev | Saved: mean | Saved: median |
+|---|---|---|---|---|---|---|---|---|---|
+| gap | 2 | 4,396 | 4,396 | 147 | 292 | 292 | 59 | 4,104 | 4,104 |
+| loss | 3 | 3,125 | 3,083 | 72 | 305 | 292 | 24 | 2,819 | 2,791 |
+| position | 2 | 3,104 | 3,104 | 29 | 416 | 416 | 59 | 2,688 | 2,688 |
+
+All other orders (control: no throw before them in their handler):
+
+| Scenario | Such orders | Exceptions: mean | Median | Std dev | Error flags: mean | Median | Std dev |
 |---|---|---|---|---|---|---|---|
-| basic | 14 | 1,050 | 396 | 1,564 | 1,601 | 416 | 2,915 |
-| empty_side | 6 | 2,910 | 1,062 | 3,191 | 2,417 | 1,042 | 2,571 |
-| gap | 4 | 5,344 | 4,834 | 1,077 | 3,812 | 3,312 | 4,048 |
-| loss | 21 | 1,516 | 417 | 1,997 | 1,192 | 375 | 2,278 |
-| position | 30 | 1,061 | 500 | 1,663 | 808 | 417 | 1,322 |
-| quiet | 2 | 5,583 | 5,583 | 1,237 | 6,292 | 6,292 | 1,532 |
-| sweep | 11 | 1,773 | 709 | 2,657 | 1,371 | 625 | 1,758 |
+| basic | 14 | 1,437 | 458 | 2,498 | 1,033 | 396 | 1,549 |
+| empty_side | 6 | 2,069 | 979 | 2,083 | 1,896 | 876 | 1,924 |
+| gap | 2 | 4,584 | 4,584 | 1,414 | 6,417 | 6,417 | 1,297 |
+| loss | 18 | 852 | 375 | 1,156 | 1,009 | 375 | 1,615 |
+| position | 28 | 857 | 479 | 1,401 | 930 | 562 | 1,175 |
+| quiet | 2 | 4,104 | 4,104 | 1,856 | 6,812 | 6,812 | 1,679 |
+| sweep | 11 | 1,333 | 625 | 1,706 | 2,435 | 791 | 3,919 |
+
+- Orders sent after a throw are consistently ~2.7–4.1 µs slower with exceptions (mean and
+  median agree; std dev under 150 ns); error flags bring them down to ~0.3–0.4 µs, 7–15×
+  faster.
+- The control shows no such gap: differences there are within single-run noise (std devs of
+  1–4 µs; `gap`'s and `quiet`'s other orders are just their cold first quotes).
 
 ### Conclusions
 
@@ -318,10 +347,9 @@ Tick-to-trade:
   only return), at ~3 µs each, often right before an order.
 - **Error flags remove that cost without changing a single order:** mean handler time falls
   5–13× in every scenario, with far less spread (std dev 8–13× lower).
-- **Tick-to-trade improves where an order follows a failed check:** the halt's cancels in
-  `gap` (median 4,834 → 3,312 ns) and the asks quoted while the bid is blocked in `loss` and
-  `position`. Elsewhere it is unchanged within single-run noise (e.g. one slow order raises
-  `basic`'s error-flags mean; `quiet` sends only its 2 cold first quotes).
+- **A throw delays any order sent after it:** with exceptions those orders take ~2.7–4.1 µs;
+  with error flags ~0.3–0.4 µs (7–15× faster). Orders with no throw before them are
+  unchanged.
 
 ---
 
