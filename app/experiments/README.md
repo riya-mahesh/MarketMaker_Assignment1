@@ -57,12 +57,12 @@ every run of `build/market_maker`), `evaluation/` (measurement).
 - A tick that triggers a bid and an ask gives **two** latencies:
   L(buy) = t(buy sent) − t(tick) and L(sell) = t(sell sent) − t(tick).
 
-### Flaw 1: one end time per delivery
+### Flaw 1: one end time per delivery matched at the end of the handler
 
 - `Requote()` can send a bid and then an ask. Only afterwards, at the end of the handler,
   does `latency_.Record()` take a single end time.
-- `analysis.h` then counts **one** sample per delivery, t(handler end) − t(tick): it ends
-  after both orders and the work that follows them, and counts 1 sample instead of 2.
+- `analysis.h` then counts **one** matched latency sample per delivery, t(handler end) − t(tick): it ends
+  after both orders and the work that follows them, and counts 1 sample instead of 2 orders.
 
 **Evidence.** Deliveries that sent a bid and an ask (ns, 30 runs):
 
