@@ -17,8 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSIONS = ["baseline", "return_codes", "cook_flags"]
-LABELS = {"baseline": "Exceptions (baseline)", "return_codes": "Return codes", "cook_flags": "Cook flags"}
+VERSIONS = ["baseline", "cook_flags"]
+LABELS = {"baseline": "Exceptions (baseline)", "cook_flags": "Error flags (fix)"}
 
 
 def timings(run_dir):
@@ -47,7 +47,7 @@ def main():
 
     for _ in range(runs):
         for scn in scenarios:
-            for v in VERSIONS:  # alternate versions so background load affects all alike
+            for v in VERSIONS:  # alternate versions so background load affects both alike
                 run_dir = out / v / scn.stem
                 subprocess.run([str(out / f"market_maker_{v}"), str(scn), "--out", str(run_dir)],
                                check=True, capture_output=True)

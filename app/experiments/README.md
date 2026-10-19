@@ -7,7 +7,7 @@ the market maker trades: `make verify` passes with all of it in place.
 |---|---|
 | `analysis_corrected.h` | Corrected latency report: tick-to-trade per order (printed after the original report by every run of `build/market_maker`) |
 | `top_of_book/` | Experiment: cached top of book vs. scanning the price ladder for the best bid and ask |
-| `risk_checks/` | Experiment: risk checks that throw exceptions vs. risk checks that return a result |
+| `risk_checks/` | Experiment: risk checks that throw exceptions vs. Cook's error flags |
 
 ## Corrected evaluation (`analysis_corrected.h`)
 
@@ -100,7 +100,7 @@ Tick-to-trade per order, in ns, over 30 runs of each version:
   would close much of the gap in these short, calm scenarios.
 - The scenarios are small (2 to 30 orders per run), hence 30 runs each.
 
-## Risk checks: exceptions vs. returned results (`risk_checks/`)
+## Risk checks: exceptions vs. error flags (`risk_checks/`)
 
 **Decision tested (design doc §2.2.3, "Risk checks").** Every check throws a
 `RiskViolation` when it fails, on the grounds that "exceptions are free when not
@@ -162,93 +162,86 @@ loads its unwinding tables). The figures include the instrumentation's own
 logging between throws, so they are somewhat higher than an isolated
 microbenchmark (about 2 µs per throw on this machine).
 
-### Fixes
+### Fix: error flags (`cook_flags/`)
 
-Both keep the same checks, in the same order, with the same outcomes:
+From Carl Cook's CppCon 2017 talk, slide 16 ("Slowpath removal"): *"Avoid this:
+if (checkForErrorA()) handleErrorA(); else if … else sendOrderToExchange(); … Aim
+for this: int64_t errorFlags; … if (!errorFlags) sendOrderToExchange(); else
+HandleError(errorFlags);"*, with the tip *"ensure that error handling code will
+not be inlined."*
 
-1. **Return codes** (`return_codes/`). Each check returns a `[[nodiscard]]
-   RiskCheck` instead of throwing (the compiler warns if a result is ignored,
-   which keeps the design doc's safety argument). `Requote()` and `QuoteSide()`
-   test it with an `if`; `Requote()` returns at once if already halted.
-2. **Cook's "slowpath removal"** (`cook_flags/`), from Carl Cook's CppCon 2017
-   talk, slide 16: *"Avoid this: if (checkForErrorA()) handleErrorA(); else if
-   … else sendOrderToExchange(); … Aim for this: int64_t errorFlags; … if
-   (!errorFlags) sendOrderToExchange(); else HandleError(errorFlags);"* with the
-   tip *"ensure that error handling code will not be inlined."*
-   `RiskGate::Flags()` computes all four conditions into one word of bits,
-   `Requote()` tests that word with a single branch, and the rare cases go to
-   `HandleRiskFlags()`, marked `[[gnu::noinline, gnu::cold]]`. The per-side
-   position checks become two bit tests, and `QuoteSide()` no longer checks risk.
+- `RiskGate::Flags()` evaluates the same four conditions into one word, one bit
+  per failure; nothing is thrown.
+- `Requote()` tests that word with a single branch; the two per-side position
+  checks become two bit tests, and `QuoteSide()` no longer checks risk.
+- The rare cases go to `HandleRiskFlags()`, marked `[[gnu::noinline, gnu::cold]]`.
+- Same checks, same order, same outcomes.
 
 ### Results
 
-`run.sh` builds the three versions (only the files above differ), runs every
-scenario 30 times per version, alternating versions, and compares every run's
-orders with `.expected`. Times in ns.
+`run.sh` builds both versions (only the files in `cook_flags/` differ), runs
+every scenario 30 times per version, alternating versions, and compares every
+run's orders with `.expected`. Times in ns.
 
-**All three versions send exactly the `.expected` orders in every scenario.**
+**Both versions send exactly the `.expected` orders in every scenario.**
 
 Tick-to-trade per order:
 
-| Scenario | Orders per run | Exceptions: mean | Exceptions: median | Return codes: mean | Return codes: median | Cook flags: mean | Cook flags: median |
-|---|---|---|---|---|---|---|---|
-| basic | 14 | 967 | 417 | 1,049 | 417 | 1,034 | 417 |
-| empty_side | 6 | 1,931 | 958 | 2,055 | 958 | 2,177 | 979 |
-| gap | 4 | 4,290 | 4,500 | 2,325 | 1,480 | 2,378 | 1,562 |
-| loss | 21 | 1,219 | 458 | 834 | 375 | 834 | 375 |
-| position | 30 | 928 | 542 | 747 | 417 | 763 | 416 |
-| quiet | 2 | 5,125 | 4,625 | 4,382 | 4,375 | 4,738 | 4,354 |
-| sweep | 11 | 1,425 | 708 | 1,395 | 708 | 1,332 | 709 |
+| Scenario | Orders per run | Exceptions: mean | Exceptions: median | Error flags: mean | Error flags: median |
+|---|---|---|---|---|---|
+| basic | 14 | 1,128 | 458 | 1,241 | 458 |
+| empty_side | 6 | 2,141 | 959 | 2,459 | 1,000 |
+| gap | 4 | 4,926 | 4,604 | 3,144 | 1,646 |
+| loss | 21 | 1,319 | 458 | 970 | 375 |
+| position | 30 | 1,052 | 583 | 888 | 438 |
+| quiet | 2 | 5,939 | 5,188 | 5,558 | 5,500 |
+| sweep | 11 | 1,548 | 709 | 1,573 | 750 |
 
 Handler time per market data message and execution report (most failed checks
 happen on messages that send no order, so this is where their cost shows):
 
-| Scenario | Messages per run | Exceptions: mean | Exceptions: median | Return codes: mean | Return codes: median | Cook flags: mean | Cook flags: median |
-|---|---|---|---|---|---|---|---|
-| basic | 44 | 1,788 | 83 | 294 | 42 | 293 | 83 |
-| empty_side | 22 | 4,268 | 1,000 | 409 | 42 | 428 | 42 |
-| gap | 16 | 5,911 | 3,375 | 436 | 42 | 445 | 42 |
-| loss | 78 | 2,283 | 500 | 209 | 42 | 209 | 42 |
-| position | 87 | 1,429 | 83 | 227 | 42 | 229 | 42 |
-| quiet | 28 | 2,714 | 42 | 258 | 42 | 267 | 42 |
-| sweep | 39 | 2,024 | 42 | 304 | 42 | 298 | 42 |
+| Scenario | Messages per run | Exceptions: mean | Exceptions: median | Error flags: mean | Error flags: median |
+|---|---|---|---|---|---|
+| basic | 44 | 1,914 | 83 | 346 | 83 |
+| empty_side | 22 | 4,662 | 1,000 | 503 | 42 |
+| gap | 16 | 6,661 | 3,375 | 578 | 42 |
+| loss | 78 | 2,409 | 480 | 234 | 42 |
+| position | 87 | 1,566 | 83 | 264 | 42 |
+| quiet | 28 | 3,139 | 42 | 317 | 42 |
+| sweep | 39 | 2,399 | 42 | 350 | 42 |
 
-`gap`, message by message (median handler time, exceptions vs. return codes;
-from an earlier run of the same builds). Message 8 is dropped, so the app halts
-at message 9:
+`gap`, message by message (median handler time, 30 runs). Message 8 is dropped,
+so the app halts at message 9:
 
-| Message | What happens | Exceptions | Return codes |
+| Message | What happens | Exceptions | Error flags |
 |---|---|---|---|
-| md 1 | Bid added, no asks yet: book invalid (first throw of the run) | 36,896 | 104 |
-| md 2 | Bid added, still invalid | 2,562 | 42 |
-| md 3 | Ask arrives: book valid, quotes both sides (no check fails) | 3,354 | 3,791 |
-| md 9 | Message 8 missing: gap, halt, cancel both quotes | 2,875 | 250 |
-| md 10 to 13 | Halted: every message ignored | 2,250 to 2,396 | 0 to 42 |
-| report 3 and 4 | Halted: cancel confirmations ignored | 2,208 to 2,250 | 41 to 42 |
+| md 1 | Bid added, no asks yet: book invalid (first throw of the run) | 57,792 | 104 |
+| md 2 | Bid added, still invalid | 4,146 | 42 |
+| md 3 | Ask arrives: book valid, quotes both sides (no check fails) | 5,354 | 5,521 |
+| md 9 | Message 8 missing: gap, halt, cancel both quotes | 4,625 | 416 |
+| md 10 to 13 | Halted: every message ignored | 3,416 to 3,625 | 41 to 84 |
+| report 3 and 4 | Halted: cancel confirmations ignored | 3,333 to 3,375 | 42 to 83 |
 
-The halt's two cancels leave 2,750 ns after the gap is detected with exceptions,
-and 208 ns without.
+The halt's two cancels leave 4,416 ns after the gap is detected with exceptions,
+and 333 ns with error flags.
 
 **Reading the results.**
 
-- Removing the exceptions cuts mean handler time 6x to 14x in every scenario,
-  and in `gap`, the scenario with the most throws per message, the median
-  handler time goes from 3,375 ns to 42 ns.
+- Error flags cut mean handler time 5x to 12x in every scenario; in `gap`, the
+  scenario with the most throws per message, the median goes from 3,375 ns to 42 ns.
 - Tick-to-trade improves wherever an order is sent after a failed check: the
-  halt's cancels in `gap` (median 4,500 to 1,480 ns), and the asks quoted while
+  halt's cancels in `gap` (median 4,604 to 1,646 ns), and the asks quoted while
   the bid is blocked in `loss` and `position`. Elsewhere no check fails on the
   way to `Send`, so tick-to-trade is unchanged.
-- The two fixes perform the same here. Both remove the exception, which is
-  where nearly all the cost is; Cook's version additionally replaces several
-  branches with one and moves the rare code out of line, savings of a few
-  nanoseconds or less that the 42 ns clock and run-to-run noise cannot resolve.
 - `quiet` sends only its 2 cold first quotes, so its tick-to-trade is noise.
+- Times here are from a separate set of runs from the throw counts above, so
+  compare versions within a table rather than across tables.
 
 **Run it.**
 
 ```sh
 sh app/experiments/risk_checks/count_throws.sh   # counts and times every throw -> throws_data.md (report: throws.md)
-sh app/experiments/risk_checks/run.sh            # three versions compared   -> results.md
+sh app/experiments/risk_checks/run.sh            # exceptions vs. error flags -> results.md
 ```
 
 ## Sources
