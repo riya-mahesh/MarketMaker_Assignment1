@@ -2,7 +2,7 @@
 #
 # Runs build/market_maker many times per scenario and measures the two flaws in the
 # original latency report (app/evaluation/analysis.h) and its correction
-# (app/experiments/analysis_corrected.h):
+# (app/experiments/evaluation/analysis_corrected.h):
 #
 #   Flaw 1  One end time per delivery. For each delivery that sends two orders (a bid
 #           and an ask), compares the original's single sample (handler end minus

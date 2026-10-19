@@ -1,6 +1,6 @@
 #!/bin/sh
 # Original latency report (app/evaluation/analysis.h) vs. corrected tick-to-trade
-# (app/experiments/analysis_corrected.h), on every scenario in sim/fixtures/.
+# (app/experiments/evaluation/analysis_corrected.h), on every scenario in sim/fixtures/.
 #
 # Builds build/market_maker and runs measure.py, which collects, over RUNS runs
 # per scenario, the samples each report summarizes and prints their mean,

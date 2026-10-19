@@ -49,8 +49,8 @@ Each script prints its tables and saves a copy under `build/experiments/`.
 
 ## 1. Corrected evaluation
 
-**Files:** `analysis_corrected.h` (the corrected report, printed after the original one by
-every run of `build/market_maker`), `evaluation/` (measurement).
+**Files** (`evaluation/`): `analysis_corrected.h` (the corrected report, printed after the
+original one by every run of `build/market_maker`), `run.sh` + `measure.py` (measurement).
 
 ### Definition: tick-to-trade
 
@@ -116,7 +116,7 @@ Times in ns; mean, median and standard deviation over the two-order deliveries o
 - Only 2% (`quiet`) to 20% (`basic`) of the averaged samples come from deliveries that
   sent an order.
 
-### Fix: per-order tick-to-trade (`analysis_corrected.h`)
+### Fix: per-order tick-to-trade (`evaluation/analysis_corrected.h`)
 
 - Iterates over the capture tap's **sends** instead of the deliveries: for each order,
   L = t(send) − t(entry) of the delivery that triggered it. Both timestamps are the tap's.
