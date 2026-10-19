@@ -4,6 +4,8 @@ Measurements supporting the Assignment 1 critique of the market maker. Nothing h
 changes what the app trades: `make verify` passes, and every experiment checks that each
 version sends exactly the orders in `sim/fixtures/*.expected`.
 
+The code path all four experiments measure is drawn in [The hot path](#the-hot-path).
+
 | # | Experiment | Design decision examined | Result in one line |
 |---|---|---|---|
 | 1 | [Corrected evaluation](#1-corrected-evaluation) | §2.1 Evaluation (flaw) | The original report takes one end time per delivery and averages deliveries that sent no order; per-order tick-to-trade fixes both |
@@ -46,6 +48,77 @@ sh app/experiments/decision_log/run.sh          # 4. fprintf vs. binary decision
 ```
 
 Each script prints its tables and saves a copy under `build/experiments/`.
+
+---
+
+## The hot path
+
+The code every experiment measures: from a market data message or exchange report arriving
+to the handler finishing. Every message ends in one of a few outcomes: no order, one order,
+two orders (bid, then ask), or cancels (halt).
+
+**From message to handler end:**
+
+```mermaid
+flowchart TD
+    MD["Market data message arrives<br/>(tap stamps arrival)"] --> DEC["OnMarketData: decode header (memcpy)"]
+    DEC --> SEQ{"Sequence number<br/>as expected?"}
+    SEQ -- no --> GAP["Latch sequence gap"] --> BOOK
+    SEQ -- yes --> BOOK["Apply to book: Add / Executed / Cancel / Delete / Replace<br/>orders_[ref], price ladder, cached top of book"]
+    BOOK --> RQ
+
+    ER["Exchange report arrives<br/>(tap stamps arrival)"] --> DEC2["OnExecutionReport: decode"]
+    DEC2 --> RT{"Report type"}
+    RT -- "Accepted / Replaced" --> ACC["Order is live; MarkOwn(ref):<br/>our order leaves fair value"] --> RQ
+    RT -- "Executed" --> EX["Update position and cash;<br/>fully filled: side has no order"] --> RQ
+    RT -- "Rejected / Canceled" --> RJ["Clear pending / live flag"] --> RQ
+
+    RQ["Requote()"] --> ST{"Halted?<br/>(gap or loss limit)"}
+    ST -- "yes, first time" --> HALT["Halt(): CANCEL every live<br/>and pending order"] --> DONE
+    ST -- "yes, already halted" --> DONE
+    ST -- no --> BV{"Book valid?<br/>both sides, not crossed"}
+    BV -- no --> DONE
+    BV -- yes --> PR["Fair value (microprice) and credit;<br/>bid rounded down, ask rounded up"]
+    PR --> QB["QuoteSide(Buy)"] --> QA["QuoteSide(Sell)"] --> DONE
+
+    DONE["latency_.Record(): handler ends"]
+```
+
+**Inside `QuoteSide()`, once per side:**
+
+```mermaid
+flowchart TD
+    Q["QuoteSide(side, desired price)"] --> PL{"Position limit<br/>would be breached?"}
+    PL -- yes --> S1["Skip this side"]
+    PL -- no --> PD{"A request for this side<br/>already in flight?"}
+    PD -- yes --> S2["Skip: one request per side"]
+    PD -- no --> LV{"Live order already at<br/>the desired price?"}
+    LV -- yes --> S3["Skip: nothing to change"]
+    LV -- no --> SQ["SendQuote(): next token, quote history,<br/>decision log (fprintf)"]
+    SQ --> T{"Order live on<br/>this side?"}
+    T -- no --> EN["Send EnterOrder<br/>(tap stamps departure)"]
+    T -- yes --> RP["Send ReplaceOrder: new price, full size<br/>(tap stamps departure)"]
+```
+
+**Every possible execution:**
+
+| Trigger | Path through the code | Orders sent | Example |
+|---|---|---|---|
+| Market data, book invalid | decode → book → `Requote` → book invalid → return | none | first messages of every scenario; `empty_side` 5–12 ms |
+| Market data, quotes already right | … → prices computed → both `QuoteSide`s skip (same price) | none | most of `quiet` |
+| Market data, one side's price moves | … → one `QuoteSide` → `SendQuote` → Replace | 1 | `basic` at 1.2 ms (ask moves) |
+| Market data, both prices move | … → bid then ask → `SendQuote` × 2 | 2 (bid, then ask) | `basic` message 3 (first quotes) |
+| Market data, side still in flight | … → `QuoteSide` skips (pending) | 0 or 1 | `sweep` at 10 ms |
+| Market data, at the position limit | … → `QuoteSide(Buy)` blocked → ask only | 0 or 1 | `position` 14–20 ms |
+| Market data, sequence gap detected | decode → latch gap → `Requote` → `Halt` | cancels (up to 4) | `gap` message 9 |
+| Any message after a halt | … → `Requote` → already halted → return | none | `gap`, `loss` after halting |
+| Report: full fill | update position → side has no order → `QuoteSide` → Enter | 1 | `sweep` ask re-entry |
+| Report: Accepted / Replaced | mark live, `MarkOwn` → maybe a new price | 0–2 | `basic` 25–45 µs (bid flicker) |
+| Report: Rejected (replace of a filled order) | clear pending → re-enter | 0 or 1 | `basic` at 5 ms |
+| Timer tick *(cold path)* | sample mid, volatility → loss limit → `Halt` | cancels, rarely | `loss` at 16 ms |
+
+The timer is not part of the hot path (it never quotes), but it can cancel orders when the
+loss limit trips.
 
 ---
 
