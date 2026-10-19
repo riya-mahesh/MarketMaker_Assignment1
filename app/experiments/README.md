@@ -131,33 +131,33 @@ Per run (30 runs per scenario; times are medians):
 
 | Scenario | Exception | What the catch does | Throws per run | ns per throw |
 |---|---|---|---|---|
-| every scenario | the first throw of the run (`BookInvalid`) | return: skip tick | 1 | 18,042 to 19,896 |
-| basic | BookInvalid | return: skip tick | 1 | 3,917 |
-| empty_side | BookInvalid | return: skip tick | 8 | 2,875 |
-| gap | BookInvalid | return: skip tick | 1 | 4,458 |
-| gap | SequenceGap | **halt** | 1 | 4,250 |
-| gap | SequenceGap | return: already halted | 6 | 3,500 |
-| loss | BookInvalid | return: skip tick | 9 | 2,792 |
-| loss | LossLimitBreached | return: already halted | 10 | 3,375 |
-| loss | PositionLimit | return: side blocked | 13 | 2,667 |
-| position | BookInvalid | return: skip tick | 1 | 3,583 |
-| position | PositionLimit | return: side blocked | 12 | 2,792 |
-| quiet | BookInvalid | return: skip tick | 2 | 3,438 |
-| sweep | BookInvalid | return: skip tick | 2 | 3,354 |
+| every scenario | the first throw of the run (`BookInvalid`) | return: skip tick | 1 | 21,271 to 25,020 |
+| basic | BookInvalid | return: skip tick | 1 | 3,875 |
+| empty_side | BookInvalid | return: skip tick | 8 | 2,750 |
+| gap | BookInvalid | return: skip tick | 1 | 3,916 |
+| gap | SequenceGap | **halt** | 1 | 4,104 |
+| gap | SequenceGap | return: already halted | 6 | 3,458 |
+| loss | BookInvalid | return: skip tick | 9 | 2,833 |
+| loss | LossLimitBreached | return: already halted | 10 | 3,416 |
+| loss | PositionLimit | return: side blocked | 13 | 2,709 |
+| position | BookInvalid | return: skip tick | 1 | 3,958 |
+| position | PositionLimit | return: side blocked | 12 | 2,709 |
+| quiet | BookInvalid | return: skip tick | 2 | 3,458 |
+| sweep | BookInvalid | return: skip tick | 2 | 3,500 |
 
 | Scenario | Throws per run | Of which halt | Time spent throwing per run (ns, mean) |
 |---|---|---|---|
-| basic | 2 | 0 | 23,876 |
-| empty_side | 9 | 0 | 46,579 |
-| gap | 9 | 1 | 52,539 |
-| loss | 33 | 0 | 114,996 |
-| position | 14 | 0 | 59,417 |
-| quiet | 3 | 0 | 26,344 |
-| sweep | 3 | 0 | 26,092 |
+| basic | 2 | 0 | 31,950 |
+| empty_side | 9 | 0 | 47,317 |
+| gap | 9 | 1 | 56,722 |
+| loss | 33 | 0 | 129,849 |
+| position | 14 | 0 | 64,933 |
+| quiet | 3 | 0 | 29,311 |
+| sweep | 3 | 0 | 30,447 |
 
 Across one run of all 7 scenarios that is 73 throws, of which 72 are routine
 `return`s (only `gap`'s first `SequenceGap` halts), and each costs
-2.7 to 4.5 µs (about 19 µs for the first throw of a run, when the C++ runtime
+2.7 to 4.0 µs (about 21 to 25 µs for the first throw of a run, when the C++ runtime
 loads its unwinding tables). The figures include the instrumentation's own
 logging between throws, so they are somewhat higher than an isolated
 microbenchmark (about 2 µs per throw on this machine).
@@ -189,48 +189,48 @@ Tick-to-trade per order:
 
 | Scenario | Orders per run | Exceptions: mean | Exceptions: median | Error flags: mean | Error flags: median |
 |---|---|---|---|---|---|
-| basic | 14 | 1,128 | 458 | 1,241 | 458 |
-| empty_side | 6 | 2,141 | 959 | 2,459 | 1,000 |
-| gap | 4 | 4,926 | 4,604 | 3,144 | 1,646 |
-| loss | 21 | 1,319 | 458 | 970 | 375 |
-| position | 30 | 1,052 | 583 | 888 | 438 |
-| quiet | 2 | 5,939 | 5,188 | 5,558 | 5,500 |
-| sweep | 11 | 1,548 | 709 | 1,573 | 750 |
+| basic | 14 | 1,005 | 417 | 1,085 | 458 |
+| empty_side | 6 | 1,997 | 917 | 2,256 | 1,000 |
+| gap | 4 | 4,534 | 4,459 | 2,524 | 1,458 |
+| loss | 21 | 1,240 | 458 | 892 | 375 |
+| position | 30 | 948 | 542 | 780 | 417 |
+| quiet | 2 | 4,842 | 4,376 | 4,874 | 4,729 |
+| sweep | 11 | 1,347 | 667 | 1,393 | 709 |
 
 Handler time per market data message and execution report (most failed checks
 happen on messages that send no order, so this is where their cost shows):
 
 | Scenario | Messages per run | Exceptions: mean | Exceptions: median | Error flags: mean | Error flags: median |
 |---|---|---|---|---|---|
-| basic | 44 | 1,914 | 83 | 346 | 83 |
-| empty_side | 22 | 4,662 | 1,000 | 503 | 42 |
-| gap | 16 | 6,661 | 3,375 | 578 | 42 |
-| loss | 78 | 2,409 | 480 | 234 | 42 |
-| position | 87 | 1,566 | 83 | 264 | 42 |
-| quiet | 28 | 3,139 | 42 | 317 | 42 |
-| sweep | 39 | 2,399 | 42 | 350 | 42 |
+| basic | 44 | 1,752 | 83 | 305 | 83 |
+| empty_side | 22 | 4,238 | 980 | 443 | 42 |
+| gap | 16 | 6,247 | 3,416 | 461 | 42 |
+| loss | 78 | 2,273 | 459 | 218 | 42 |
+| position | 87 | 1,406 | 83 | 235 | 42 |
+| quiet | 28 | 2,589 | 42 | 273 | 42 |
+| sweep | 39 | 1,996 | 42 | 306 | 42 |
 
 `gap`, message by message (median handler time, 30 runs). Message 8 is dropped,
 so the app halts at message 9:
 
 | Message | What happens | Exceptions | Error flags |
 |---|---|---|---|
-| md 1 | Bid added, no asks yet: book invalid (first throw of the run) | 57,792 | 104 |
-| md 2 | Bid added, still invalid | 4,146 | 42 |
-| md 3 | Ask arrives: book valid, quotes both sides (no check fails) | 5,354 | 5,521 |
-| md 9 | Message 8 missing: gap, halt, cancel both quotes | 4,625 | 416 |
-| md 10 to 13 | Halted: every message ignored | 3,416 to 3,625 | 41 to 84 |
-| report 3 and 4 | Halted: cancel confirmations ignored | 3,333 to 3,375 | 42 to 83 |
+| md 1 | Bid added, no asks yet: book invalid (first throw of the run) | 52,188 | 166 |
+| md 2 | Bid added, still invalid | 3,834 | 42 |
+| md 3 | Ask arrives: book valid, quotes both sides (no check fails) | 4,708 | 5,230 |
+| md 9 | Message 8 missing: gap, halt, cancel both quotes | 4,458 | 417 |
+| md 10 to 13 | Halted: every message ignored | 3,396 to 3,625 | 41 to 104 |
+| report 3 and 4 | Halted: cancel confirmations ignored | 3,334 to 3,396 | 42 |
 
-The halt's two cancels leave 4,416 ns after the gap is detected with exceptions,
+The halt's two cancels leave 4,250 ns after the gap is detected with exceptions,
 and 333 ns with error flags.
 
 **Reading the results.**
 
-- Error flags cut mean handler time 5x to 12x in every scenario; in `gap`, the
-  scenario with the most throws per message, the median goes from 3,375 ns to 42 ns.
+- Error flags cut mean handler time 6x to 14x in every scenario; in `gap`, the
+  scenario with the most throws per message, the median goes from 3,416 ns to 42 ns.
 - Tick-to-trade improves wherever an order is sent after a failed check: the
-  halt's cancels in `gap` (median 4,604 to 1,646 ns), and the asks quoted while
+  halt's cancels in `gap` (median 4,459 to 1,458 ns), and the asks quoted while
   the bid is blocked in `loss` and `position`. Elsewhere no check fails on the
   way to `Send`, so tick-to-trade is unchanged.
 - `quiet` sends only its 2 cold first quotes, so its tick-to-trade is noise.

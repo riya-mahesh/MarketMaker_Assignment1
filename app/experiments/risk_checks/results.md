@@ -4,22 +4,22 @@ Tick-to-trade per order
 
 | Scenario | Orders per run | Same orders as .expected | Exceptions (baseline): mean | Exceptions (baseline): median | Error flags (fix): mean | Error flags (fix): median |
 |---|---|---|---|---|---|---|
-| basic | 14 | yes | 1,128 | 458 | 1,241 | 458 |
-| empty_side | 6 | yes | 2,141 | 959 | 2,459 | 1,000 |
-| gap | 4 | yes | 4,926 | 4,604 | 3,144 | 1,646 |
-| loss | 21 | yes | 1,319 | 458 | 970 | 375 |
-| position | 30 | yes | 1,052 | 583 | 888 | 438 |
-| quiet | 2 | yes | 5,939 | 5,188 | 5,558 | 5,500 |
-| sweep | 11 | yes | 1,548 | 709 | 1,573 | 750 |
+| basic | 14 | yes | 1,005 | 417 | 1,085 | 458 |
+| empty_side | 6 | yes | 1,997 | 917 | 2,256 | 1,000 |
+| gap | 4 | yes | 4,534 | 4,459 | 2,524 | 1,458 |
+| loss | 21 | yes | 1,240 | 458 | 892 | 375 |
+| position | 30 | yes | 948 | 542 | 780 | 417 |
+| quiet | 2 | yes | 4,842 | 4,376 | 4,874 | 4,729 |
+| sweep | 11 | yes | 1,347 | 667 | 1,393 | 709 |
 
 Handler time per market data message and execution report
 
 | Scenario | Messages per run | Same orders as .expected | Exceptions (baseline): mean | Exceptions (baseline): median | Error flags (fix): mean | Error flags (fix): median |
 |---|---|---|---|---|---|---|
-| basic | 44 | yes | 1,914 | 83 | 346 | 83 |
-| empty_side | 22 | yes | 4,662 | 1,000 | 503 | 42 |
-| gap | 16 | yes | 6,661 | 3,375 | 578 | 42 |
-| loss | 78 | yes | 2,409 | 480 | 234 | 42 |
-| position | 87 | yes | 1,566 | 83 | 264 | 42 |
-| quiet | 28 | yes | 3,139 | 42 | 317 | 42 |
-| sweep | 39 | yes | 2,399 | 42 | 350 | 42 |
+| basic | 44 | yes | 1,752 | 83 | 305 | 83 |
+| empty_side | 22 | yes | 4,238 | 980 | 443 | 42 |
+| gap | 16 | yes | 6,247 | 3,416 | 461 | 42 |
+| loss | 78 | yes | 2,273 | 459 | 218 | 42 |
+| position | 87 | yes | 1,406 | 83 | 235 | 42 |
+| quiet | 28 | yes | 2,589 | 42 | 273 | 42 |
+| sweep | 39 | yes | 1,996 | 42 | 306 | 42 |
